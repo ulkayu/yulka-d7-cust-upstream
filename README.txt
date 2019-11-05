@@ -1,5 +1,5 @@
 
-New commit in upstream
+New commit 
 CONTENTS OF THIS FILE
 ---------------------
 
