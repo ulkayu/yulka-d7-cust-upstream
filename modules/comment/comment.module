@@ -290,9 +290,6 @@ function comment_menu() {
   return $items;
 }
 
-function views_init() {
-  drupal_set_message('This will dissappear after the update!');
-}
 /**
  * Implements hook_menu_alter().
  */
