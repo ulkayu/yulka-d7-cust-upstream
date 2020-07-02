@@ -1,5 +1,4 @@
 
-New commit 
 CONTENTS OF THIS FILE
 ---------------------
 
