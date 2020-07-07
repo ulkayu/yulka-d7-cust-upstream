@@ -105,8 +105,7 @@
  *   generate the same form (or very similar forms) using different $form_ids
  *   can implement hook_forms(), which maps different $form_id values to the
  *   proper form constructor function. Examples may be found in node_forms(),
- *   and search_forms(). hook_forms() can also be used to define forms in
- *   classes.
+ *   and search_forms().
  * @param ...
  *   Any additional arguments are passed on to the functions called by
  *   drupal_get_form(), including the unique form constructor function. For
@@ -555,10 +554,8 @@ function form_get_cache($form_build_id, &$form_state) {
  * Stores a form in the cache.
  */
 function form_set_cache($form_build_id, $form, $form_state) {
-  // The default cache_form expiration is 6 hours. On busy sites, the cache_form
-  // table can become very large. A shorter cache lifetime can help to keep the
-  // table's size under control.
-  $expire = variable_get('form_cache_expiration', 21600);
+  // 6 hours cache life time for forms should be plenty.
+  $expire = 21600;
 
   // Ensure that the form build_id embedded in the form structure is the same as
   // the one passed in as a parameter. This is an additional safety measure to
@@ -812,7 +809,7 @@ function drupal_retrieve_form($form_id, &$form_state) {
     }
     if (isset($form_definition['callback'])) {
       $callback = $form_definition['callback'];
-      $form_state['build_info']['base_form_id'] = isset($form_definition['base_form_id']) ? $form_definition['base_form_id'] : $callback;
+      $form_state['build_info']['base_form_id'] = $callback;
     }
     // In case $form_state['wrapper_callback'] is not defined already, we also
     // allow hook_forms() to define one.
@@ -833,7 +830,7 @@ function drupal_retrieve_form($form_id, &$form_state) {
   // the actual form builder function ($callback) expects. This allows for
   // pre-populating a form with common elements for certain forms, such as
   // back/next/save buttons in multi-step form wizards. See drupal_build_form().
-  if (isset($form_state['wrapper_callback']) && is_callable($form_state['wrapper_callback'])) {
+  if (isset($form_state['wrapper_callback']) && function_exists($form_state['wrapper_callback'])) {
     $form = call_user_func_array($form_state['wrapper_callback'], $args);
     // Put the prepopulated $form into $args.
     $args[0] = $form;
@@ -1135,8 +1132,12 @@ function drupal_prepare_form($form_id, &$form, &$form_state) {
  * Helper function to call form_set_error() if there is a token error.
  */
 function _drupal_invalid_token_set_form_error() {
+  $path = current_path();
+  $query = drupal_get_query_parameters();
+  $url = url($path, array('query' => $query));
+
   // Setting this error will cause the form to fail validation.
-  form_set_error('form_token', t('The form has become outdated. Press the back button, copy any unsaved work in the form, and then reload the page.'));
+  form_set_error('form_token', t('The form has become outdated. Copy any unsaved work in the form below and then <a href="@link">reload this page</a>.', array('@link' => $url)));
 }
 
 /**
@@ -1174,14 +1175,9 @@ function drupal_validate_form($form_id, &$form, &$form_state) {
   // If the session token was set by drupal_prepare_form(), ensure that it
   // matches the current user's session. This is duplicate to code in
   // form_builder() but left to protect any custom form handling code.
-  if (!empty($form['#token'])) {
+  if (isset($form['#token'])) {
     if (!drupal_valid_token($form_state['values']['form_token'], $form['#token']) || !empty($form_state['invalid_token'])) {
       _drupal_invalid_token_set_form_error();
-      // Ignore all submitted values.
-      $form_state['input'] = array();
-      $_POST = array();
-      // Make sure file uploads do not get processed.
-      $_FILES = array();
       // Stop here and don't run any further validation handlers, because they
       // could invoke non-safe operations which opens the door for CSRF
       // vulnerabilities.
@@ -1441,12 +1437,10 @@ function _form_validate(&$elements, &$form_state, $form_id = NULL) {
       // length if it's a string, and the item count if it's an array.
       // An unchecked checkbox has a #value of integer 0, different than string
       // '0', which could be a valid value.
-      $is_countable = is_array($elements['#value']) || $elements['#value'] instanceof Countable;
-      $is_empty_multiple = $is_countable && count($elements['#value']) == 0;
+      $is_empty_multiple = (!count($elements['#value']));
       $is_empty_string = (is_string($elements['#value']) && drupal_strlen(trim($elements['#value'])) == 0);
       $is_empty_value = ($elements['#value'] === 0);
-      $is_empty_null = is_null($elements['#value']);
-      if ($is_empty_multiple || $is_empty_string || $is_empty_value || $is_empty_null) {
+      if ($is_empty_multiple || $is_empty_string || $is_empty_value) {
         // Although discouraged, a #title is not mandatory for form elements. In
         // case there is no #title, we cannot set a form error message.
         // Instead of setting no #title, form constructors are encouraged to set
@@ -1842,16 +1836,13 @@ function form_builder($form_id, &$element, &$form_state) {
       // If the session token was set by drupal_prepare_form(), ensure that it
       // matches the current user's session.
       $form_state['invalid_token'] = FALSE;
-      if (!empty($element['#token'])) {
+      if (isset($element['#token'])) {
         if (empty($form_state['input']['form_token']) || !drupal_valid_token($form_state['input']['form_token'], $element['#token'])) {
           // Set an early form error to block certain input processing since that
           // opens the door for CSRF vulnerabilities.
           _drupal_invalid_token_set_form_error();
           // This value is checked in _form_builder_handle_input_element().
           $form_state['invalid_token'] = TRUE;
-          // Ignore all submitted values.
-          $form_state['input'] = array();
-          $_POST = array();
           // Make sure file uploads do not get processed.
           $_FILES = array();
         }
@@ -2580,7 +2571,7 @@ function form_type_select_value($element, $input = FALSE) {
  *   for this element. Return nothing to use the default.
  */
 function form_type_textarea_value($element, $input = FALSE) {
-  if ($input !== FALSE && $input !== NULL) {
+  if ($input !== FALSE) {
     // This should be a string, but allow other scalars since they might be
     // valid input in programmatic form submissions.
     return is_scalar($input) ? (string) $input : '';
@@ -3037,7 +3028,7 @@ function form_process_password_confirm($element) {
 function password_confirm_validate($element, &$element_state) {
   $pass1 = trim($element['pass1']['#value']);
   $pass2 = trim($element['pass2']['#value']);
-  if (strlen($pass1) > 0 || strlen($pass2) > 0) {
+  if (!empty($pass1) || !empty($pass2)) {
     if (strcmp($pass1, $pass2)) {
       form_error($element, t('The specified passwords do not match.'));
     }
@@ -3554,7 +3545,6 @@ function form_process_tableselect($element) {
             '#return_value' => $key,
             '#default_value' => isset($value[$key]) ? $key : NULL,
             '#attributes' => $element['#attributes'],
-            '#ajax' => isset($element['#ajax']) ? $element['#ajax'] : NULL,
           );
         }
         else {
