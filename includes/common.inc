@@ -391,7 +391,7 @@ function drupal_add_feed($url = NULL, $title = '') {
  */
 function drupal_get_feeds($delimiter = "\n") {
   $feeds = drupal_add_feed();
-  return implode($delimiter, $feeds);
+  return implode($feeds, $delimiter);
 }
 
 /**
@@ -3675,7 +3675,7 @@ function drupal_build_css_cache($css) {
     $uri = $map[$key];
   }
 
-  if (empty($uri) || !file_exists($uri)) {
+  if (empty($uri) || !drupal_aggregated_file_exists($uri)) {
     // Build aggregate CSS file.
     foreach ($css as $stylesheet) {
       // Only 'file' stylesheets can be aggregated.
@@ -3743,7 +3743,7 @@ function _drupal_build_css_path($matches, $base = NULL) {
   }
 
   // Prefix with base and remove '../' segments where possible.
-  $path = $_base . (isset($matches[1]) ? $matches[1] : '');
+  $path = $_base . $matches[1];
   $last = '';
   while ($path != $last) {
     $last = $path;
@@ -5119,6 +5119,19 @@ function drupal_add_tabledrag($table_id, $action, $relationship, $group, $subgro
   drupal_add_js($settings, 'setting');
 }
 
+function drupal_aggregated_file_exists($uri) {
+  if (function_exists('apc_exists')) {
+    $exists = apc_exists('file_exists_' . $uri);
+    if (!$exists && file_exists($uri)) {
+      $exists = TRUE;
+      apc_store('file_exists_' . $uri, TRUE, 86400);
+    }
+    return $exists;
+  }
+  // If no APC available, fall back to default.
+  return file_exists($uri);
+}
+
 /**
  * Aggregates JavaScript files into a cache file in the files directory.
  *
@@ -5158,7 +5171,7 @@ function drupal_build_js_cache($files) {
     $uri = $map[$key];
   }
 
-  if (empty($uri) || !file_exists($uri)) {
+  if (empty($uri) || !drupal_aggregated_file_exists($uri)) {
     // Build aggregate JS file.
     foreach ($files as $path => $info) {
       if ($info['preprocess']) {
@@ -5166,6 +5179,10 @@ function drupal_build_js_cache($files) {
         $contents .= file_get_contents($path) . ";\n";
       }
     }
+
+    // Allow modules to act on the js_cache before writing to disk.
+    drupal_alter('js_cache', $contents);
+
     // Prefix filename to prevent blocking by firewalls which reject files
     // starting with "ad*".
     $filename = 'js_' . drupal_hash_base64($contents) . '.js';
@@ -6656,7 +6673,7 @@ function element_children(&$elements, $sort = FALSE) {
   $children = array();
   $sortable = FALSE;
   foreach ($elements as $key => $value) {
-    if (is_int($key) || $key === '' || $key[0] !== '#') {
+    if ($key === '' || $key[0] !== '#') {
       $children[$key] = $value;
       if (is_array($value) && isset($value['#weight'])) {
         $sortable = TRUE;
