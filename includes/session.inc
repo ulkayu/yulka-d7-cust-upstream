@@ -163,7 +163,7 @@ function _drupal_session_write($sid, $value) {
   try {
     if (!drupal_save_session()) {
       // We don't have anything to do if we are not allowed to save the session.
-      return TRUE;
+      return;
     }
 
     // Check whether $_SESSION has been changed in this request.
@@ -371,11 +371,8 @@ function drupal_session_regenerate() {
 
   if (drupal_session_started()) {
     $old_session_id = session_id();
-    _drupal_session_regenerate_existing();
   }
-  else {
-    session_id(drupal_random_key());
-  }
+  session_id(drupal_random_key());
 
   if (isset($old_session_id)) {
     $params = session_get_cookie_params();
@@ -416,26 +413,6 @@ function drupal_session_regenerate() {
 }
 
 /**
- * Regenerates an existing session.
- */
-function _drupal_session_regenerate_existing() {
-  global $user;
-  // Preserve existing settings for the saving of sessions.
-  $original_save_session_status = drupal_save_session();
-  // Turn off saving of sessions.
-  drupal_save_session(FALSE);
-  session_write_close();
-  drupal_session_started(FALSE);
-  // Preserve the user object, as starting a new session will reset it.
-  $original_user = $user;
-  session_id(drupal_random_key());
-  drupal_session_start();
-  $user = $original_user;
-  // Restore the original settings for the saving of sessions.
-  drupal_save_session($original_save_session_status);
-}
-
-/**
  * Session handler assigned by session_set_save_handler().
  *
  * Cleans up a specific session.
@@ -448,7 +425,7 @@ function _drupal_session_destroy($sid) {
 
   // Nothing to do if we are not allowed to change the session.
   if (!drupal_save_session()) {
-    return TRUE;
+    return;
   }
 
   // Delete session data.
@@ -469,8 +446,6 @@ function _drupal_session_destroy($sid) {
   elseif (variable_get('https', FALSE)) {
     _drupal_session_delete_cookie('S' . session_name(), TRUE);
   }
-
-  return TRUE;
 }
 
 /**
